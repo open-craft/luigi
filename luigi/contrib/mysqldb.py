@@ -124,7 +124,13 @@ class MySqlTarget(luigi.Target):
         """
         connection = self.connect(autocommit=True)
         cursor = connection.cursor()
-        try:
+        # Check if the table exists before trying to create it. Otherwise if it exists,
+        # CREATE TABLE can make MySQL can hang forever "Waiting for table metadata lock"
+        cursor.execute(
+            "SELECT COUNT(*) FROM information_schema.tables "
+            "WHERE table_name = '{}'".format(self.marker_table)
+        )
+        if cursor.fetchone()[0] == 0:
             cursor.execute(
                 """ CREATE TABLE {marker_table} (
                         id            BIGINT(20)    NOT NULL AUTO_INCREMENT,
@@ -137,9 +143,4 @@ class MySqlTarget(luigi.Target):
                 """
                 .format(marker_table=self.marker_table)
             )
-        except mysql.connector.Error as e:
-            if e.errno == errorcode.ER_TABLE_EXISTS_ERROR:
-                pass
-            else:
-                raise
         connection.close()
